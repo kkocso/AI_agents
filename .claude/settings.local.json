@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(__NEW_LINE_e9e9505bfe9711ed__:*)",
+      "Bash(__NEW_LINE_874744c14bc4efb2__:*)",
+      "Bash(__NEW_LINE_e8c4b4309db00869__:*)",
+      "Bash(__NEW_LINE_699703677a9d7f21__:*)",
+      "Bash(__NEW_LINE_64ca6ab6a4612384__:*)",
+      "Bash(__NEW_LINE_f64b68ceccfed5a8__:*)",
+      "Bash(__NEW_LINE_5a52bc085d240935__:*)"
+    ]
+  }
+}
