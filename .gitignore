@@ -17,8 +17,11 @@ env/
 .vscode/
 .idea/
 
+# Claude Code local settings
+.claude/
+
 # Logs / output
 *.log
 
-# Generated docs
+# Local-only docs (helper for AI and humans; keep a local copy, do not track on GitHub)
 walkthrough.md

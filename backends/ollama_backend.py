@@ -14,5 +14,17 @@ class OllamaBackend(BaseBackend):
     async def generate(self, system_prompt: str, messages: List[ChatMessage]) -> str:
         formatted = [{"role": "system", "content": system_prompt}]
         formatted += [{"role": m.role, "content": m.content} for m in messages]
-        response = await self._client.chat(model=self.model, messages=formatted)
-        return response.message.content
+        try:
+            response = await self._client.chat(model=self.model, messages=formatted)
+        except (ConnectionError, OSError) as e:
+            raise RuntimeError(
+                f"Ollama request failed (is Ollama running?): {e}"
+            ) from e
+        except Exception as e:
+            raise RuntimeError(f"Ollama request failed: {e}") from e
+        if response is None or not getattr(response, "message", None):
+            return "(No response from Ollama.)"
+        content = getattr(response.message, "content", None)
+        if content is None or (isinstance(content, str) and not content.strip()):
+            return "(Empty response from Ollama.)"
+        return content

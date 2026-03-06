@@ -21,4 +21,12 @@ class ClaudeBackend(BaseBackend):
             system=system_prompt,
             messages=formatted,
         )
-        return response.content[0].text
+        if not response.content:
+            return "(No response from the model.)"
+        text_parts = [
+            block.text for block in response.content
+            if hasattr(block, "text") and block.text
+        ]
+        if not text_parts:
+            return "(No text in the model response.)"
+        return "".join(text_parts)

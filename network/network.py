@@ -1,10 +1,13 @@
 import asyncio
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from agents.orchestrator import OrchestratorAgent
 from agents.parser import parse_agent_file
 from agents.worker_agent import WorkerAgent
 from network.message import AgentValidation, ApprovalStatus
+
+if TYPE_CHECKING:
+    from ui.cli import CLI
 
 
 class AgentNetwork:
@@ -40,7 +43,7 @@ class AgentNetwork:
         if not self.workers:
             raise ValueError("At least one non-orchestrator agent is required.")
 
-    async def run_task(self, task: str, cli) -> Tuple[str, List[AgentValidation]]:
+    async def run_task(self, task: str, cli: CLI) -> Tuple[str, List[AgentValidation]]:
         self._worker_feedbacks = {}
 
         # Phase 1: Gather feedback from all workers in parallel
@@ -62,7 +65,7 @@ class AgentNetwork:
         plan, dissatisfied = await self._validation_rounds(task, plan, feedbacks, cli)
         return plan, dissatisfied
 
-    async def _gather_feedback(self, task: str, cli) -> List[Tuple[str, str]]:
+    async def _gather_feedback(self, task: str, cli: CLI) -> List[Tuple[str, str]]:
         async def get_feedback(worker: WorkerAgent) -> Tuple[str, str]:
             return worker.name, await worker.give_feedback(task)
 
@@ -80,7 +83,7 @@ class AgentNetwork:
         task: str,
         plan: str,
         feedbacks: List[Tuple[str, str]],
-        cli,
+        cli: CLI,
     ) -> Tuple[str, List[AgentValidation]]:
         current_plan = plan
 
@@ -110,22 +113,10 @@ class AgentNetwork:
             if round_num == self.max_rounds:
                 return current_plan, concerns
 
-            # Add human note as a concern for the orchestrator if provided
-            refine_concerns = list(concerns)
-            if human_note:
-                from network.message import AgentValidation, ApprovalStatus
-                refine_concerns.append(
-                    AgentValidation(
-                        agent_name="Human",
-                        status=ApprovalStatus.CONCERN,
-                        reasoning=human_note,
-                    )
-                )
-
             cli.phase(f"{self.orchestrator.name} is refining the plan...")
             with cli.thinking(self.orchestrator.name):
                 current_plan = await self.orchestrator.refine_plan(
-                    task, current_plan, feedbacks, refine_concerns
+                    task, current_plan, feedbacks, concerns, human_note
                 )
             cli.show_plan(current_plan, version=round_num + 1)
 

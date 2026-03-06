@@ -69,3 +69,17 @@ If `backend: claude` is set without a `model:` key, `claude-sonnet-4-6` is used 
 - **New backend**: subclass `backends/base.py:BaseBackend`, implement `generate(system_prompt, messages)`.
 - **New agent role**: subclass `agents/base_agent.py:BaseAgent`. Register it in `agents/parser.py`.
 - **Different consensus logic**: modify `AgentNetwork._consensus_reached` in `network/network.py`.
+
+### Key design decisions to preserve
+
+- **`network/network.py` imports `CLI` under `TYPE_CHECKING` only** — this is intentional to avoid a runtime circular dependency (network layer importing the UI layer). Do not move it to a top-level import.
+- **`_parse_validation` defaults to `CONCERN`** — if the LLM response is ambiguous or malformed, the parser in `agents/worker_agent.py` treats it as a concern rather than an approval. This is a deliberate safety choice; do not change the default to `APPROVE`.
+- **Human notes are passed as `human_note` to `refine_plan`, not wrapped in `AgentValidation`** — `OrchestratorAgent.refine_plan` has a dedicated `human_note: str` parameter that formats the input differently from agent concerns. Keep them separate.
+
+### `walkthrough.md`
+
+`walkthrough.md` is gitignored and built with [showboat](https://github.com/nicholasgasior/showboat). Do not edit it by hand. To verify it is still in sync with the code run:
+
+```bash
+/Users/gaborkocsis/jira-rest-anonymizer/.venv/bin/uvx showboat verify walkthrough.md --workdir .
+```
