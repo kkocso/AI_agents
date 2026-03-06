@@ -8,17 +8,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies
 pip install -r requirements.txt
 
-# Basic run with the bundled example personas
-python main.py --agents personas/orchestrator.md personas/business_analyst.md personas/architect.md personas/tech_lead.md
+# Product Owner leading a delivery team
+python main.py --agents personas/orchestrators/product_owner.md \
+               personas/workers/business_analyst.md \
+               personas/workers/architect.md \
+               personas/workers/tech_lead.md
+
+# Architect leading a tech design session
+python main.py --agents personas/orchestrators/architect_orchestrator.md \
+               personas/workers/tech_lead.md
 
 # Use Claude API as the default backend
-python main.py --agents personas/*.md --backend claude --model claude-sonnet-4-6
+python main.py --agents personas/orchestrators/product_owner.md \
+               personas/workers/*.md \
+               --backend claude --model claude-sonnet-4-6
 
 # Use majority consensus and limit to 3 rounds
-python main.py --agents personas/*.md --consensus majority --max-rounds 3
+python main.py --agents personas/orchestrators/product_owner.md \
+               personas/workers/*.md \
+               --consensus majority --max-rounds 3
 ```
 
 Ollama must be running locally (`ollama serve`) when using the default ollama backend.
+
+Personas are organised into two subdirectories:
+- `personas/orchestrators/` — one orchestrator is selected per session (`role: orchestrator`)
+- `personas/workers/` — any number of workers can be combined freely (`role: worker`)
 
 ## Architecture
 

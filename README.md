@@ -32,14 +32,22 @@ export ANTHROPIC_API_KEY=your_key_here
 ## Running
 
 ```bash
-python main.py --agents personas/orchestrator.md personas/business_analyst.md personas/architect.md personas/tech_lead.md
+# Product Owner leading a delivery team
+python main.py --agents personas/orchestrators/product_owner.md \
+               personas/workers/business_analyst.md \
+               personas/workers/architect.md \
+               personas/workers/tech_lead.md
+
+# Architect leading a tech design session
+python main.py --agents personas/orchestrators/architect_orchestrator.md \
+               personas/workers/tech_lead.md
 ```
 
 With options:
 
 ```bash
 python main.py \
-  --agents personas/*.md \
+  --agents personas/orchestrators/product_owner.md personas/workers/*.md \
   --backend claude \
   --model claude-sonnet-4-6 \
   --consensus majority \
@@ -82,12 +90,16 @@ Frontmatter keys:
 | `backend` | No | `ollama` or `claude`. Overrides the global `--backend` for this agent only. |
 | `model` | No | Model string. If `backend: claude` is set without a model, `claude-sonnet-4-6` is used automatically. |
 
-Four example personas are included in `personas/`:
+Example personas are included under `personas/`:
 
-- `orchestrator.md` — Product Owner: synthesizes and refines the plan
-- `business_analyst.md` — Business Analyst: requirements, acceptance criteria, compliance
-- `architect.md` — Architect: system design, non-functional requirements, technical debt
-- `tech_lead.md` — Tech Lead: implementation feasibility, testing, CI/CD
+**`personas/orchestrators/`** — pick one per session:
+- `product_owner.md` — Product Owner: synthesizes and refines plans for delivery teams
+- `architect_orchestrator.md` — Architect: leads technical design sessions with Tech Leads
+
+**`personas/workers/`** — combine freely:
+- `business_analyst.md` — requirements, acceptance criteria, compliance
+- `architect.md` — system design, non-functional requirements, technical debt
+- `tech_lead.md` — implementation feasibility, testing, CI/CD
 
 ## Chat mode
 
