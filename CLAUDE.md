@@ -8,6 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies
 pip install -r requirements.txt
 
+# First-time setup: copy examples to your local (gitignored) personas folder
+cp -r personas.example/ personas/
+
 # Product Owner leading a delivery team
 python main.py --agents personas/orchestrators/product_owner.md \
                personas/workers/business_analyst.md \
@@ -31,9 +34,11 @@ python main.py --agents personas/orchestrators/product_owner.md \
 
 Ollama must be running locally (`ollama serve`) when using the default ollama backend.
 
-Personas are organised into two subdirectories:
-- `personas/orchestrators/` — one orchestrator is selected per session (`role: orchestrator`)
-- `personas/workers/` — any number of workers can be combined freely (`role: worker`)
+**Persona folders:**
+- `personas.example/` — tracked in git; reference templates, do not run directly
+- `personas/` — gitignored; copy from `personas.example/` and customise freely
+  - `personas/orchestrators/` — pick one per session (`role: orchestrator`)
+  - `personas/workers/` — combine any number freely (`role: worker`)
 
 ## Architecture
 

@@ -25,3 +25,6 @@ env/
 
 # Local-only docs (helper for AI and humans; keep a local copy, do not track on GitHub)
 walkthrough.md
+
+# Private persona files (copy from personas.example/ and customise locally)
+personas/

@@ -27,7 +27,12 @@ ollama pull llama3.2
 
 # If using Claude API:
 export ANTHROPIC_API_KEY=your_key_here
+
+# Create your local persona folder from the provided examples:
+cp -r personas.example/ personas/
 ```
+
+`personas/` is gitignored — customise freely without risking sharing private persona content.
 
 ## Running
 
@@ -41,6 +46,10 @@ python main.py --agents personas/orchestrators/product_owner.md \
 # Architect leading a tech design session
 python main.py --agents personas/orchestrators/architect_orchestrator.md \
                personas/workers/tech_lead.md
+
+# Load all workers with a glob
+python main.py --agents personas/orchestrators/product_owner.md \
+               personas/workers/*.md
 ```
 
 With options:
@@ -90,7 +99,7 @@ Frontmatter keys:
 | `backend` | No | `ollama` or `claude`. Overrides the global `--backend` for this agent only. |
 | `model` | No | Model string. If `backend: claude` is set without a model, `claude-sonnet-4-6` is used automatically. |
 
-Example personas are included under `personas/`:
+Example personas are provided in `personas.example/` as a starting point. After running `cp -r personas.example/ personas/` you'll have:
 
 **`personas/orchestrators/`** — pick one per session:
 - `product_owner.md` — Product Owner: synthesizes and refines plans for delivery teams
@@ -100,6 +109,8 @@ Example personas are included under `personas/`:
 - `business_analyst.md` — requirements, acceptance criteria, compliance
 - `architect.md` — system design, non-functional requirements, technical debt
 - `tech_lead.md` — implementation feasibility, testing, CI/CD
+
+Add as many personas as you like to `personas/` — the folder is gitignored so nothing is shared.
 
 ## Chat mode
 
