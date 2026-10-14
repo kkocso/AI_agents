@@ -164,6 +164,12 @@ Project specifics:
   | `ai_no_answer_share` | ≤ 0.05 | AI requests that returned no usable answer |
   | `cost_usd_estimate` | ≤ 0.50 USD | estimated Claude cost per session (`observability.py:PRICE_TABLE` — verify prices and model ids before quoting) |
 
+- **Prompt caching (proposal, off by default):** `CLAUDE_PROMPT_CACHE=1` sends the
+  persona system prompt with `cache_control: ephemeral`. Without it the request is
+  unchanged. It only pays off when a persona is above the model's minimum cacheable
+  length (1024 tokens for Sonnet 4.6; the example personas are ~150–250 tokens, so
+  no effect there). Check `cache_read_input_tokens` / `cache_share` in the run log
+  before making it the default (needs Gábor's approval: API behaviour).
 - Tests: `pip install pytest && python -m pytest -q` (no network, no Ollama, no API key).
 
 ## Autonomy matrix
