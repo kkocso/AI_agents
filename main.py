@@ -3,6 +3,7 @@ import asyncio
 import sys
 
 from network.network import AgentNetwork
+from observability import record_chat_turn, record_metrics, record_session_start, start_run
 from ui.cli import CLI
 
 
@@ -36,24 +37,42 @@ examples:
         "--max-rounds", type=int, default=5,
         help="Max validation rounds before forcing a conclusion (default: 5)",
     )
+    parser.add_argument(
+        "--debug-trace", action="store_true",
+        help="Run log keeps prompt/answer texts (local debugging only; never share runs/)",
+    )
     return parser.parse_args()
 
 
 async def run() -> None:
     args = parse_args()
     cli = CLI()
-    network = AgentNetwork(
-        default_backend=args.backend,
-        default_model=args.model,
-        consensus=args.consensus,
-        max_rounds=args.max_rounds,
-    )
+    # One session = one run log in runs/ (no task/plan/persona/chat text).
+    with start_run(args) as run_log:
+        network = AgentNetwork(
+            default_backend=args.backend,
+            default_model=args.model,
+            consensus=args.consensus,
+            max_rounds=args.max_rounds,
+            run=run_log,
+        )
+        try:
+            await session(args, cli, network)
+        finally:
+            record_metrics(run_log, network)
+    if run_log.dir.exists():
+        cli.console.print(f"[dim]Run log: {run_log.dir}[/dim]")
 
+
+async def session(args: argparse.Namespace, cli: CLI, network: AgentNetwork) -> None:
+    run_log = network.run
     try:
         network.load_agents(args.agents)
     except (ValueError, FileNotFoundError) as e:
         cli.console.print(f"[bold red]Error:[/bold red] {e}")
         sys.exit(1)
+    if run_log is not None:
+        record_session_start(run_log, network, args)
 
     cli.show_banner(
         orchestrator_name=network.orchestrator.name,
@@ -61,6 +80,8 @@ async def run() -> None:
     )
 
     while True:
+        if run_log is not None:
+            run_log.mark_stage("task_input")
         task = await cli.get_input("Enter a task/feature to plan (or 'quit')")
         if task.lower() == "quit":
             break
@@ -71,6 +92,8 @@ async def run() -> None:
         cli.show_final_result(plan, dissatisfied)
 
         # Free chat mode after planning session
+        if run_log is not None:
+            run_log.mark_stage("chat_mode")
         cli.console.print(
             "[dim]You are now in chat mode. Talk to agents about the plan, "
             "type 'new' for a new task, or 'quit' to exit.[/dim]"
@@ -81,7 +104,7 @@ async def run() -> None:
             if not user_input:
                 continue
             if user_input.lower() == "quit":
-                sys.exit(0)
+                return  # same exit code 0 as before, but the run log closes cleanly
             if user_input.lower() == "new":
                 break
 
@@ -93,11 +116,14 @@ async def run() -> None:
                 if target == "all":
                     with cli.thinking_all(network.all_agent_names):
                         responses = await network.broadcast_chat(message)
+                    record_chat_turn(run_log, "all", replies=len(responses))
                     for name, response in responses:
                         cli.agent_message(name, response)
                 else:
                     with cli.thinking(target):
                         result = await network.chat_with_agent(target, message)
+                    record_chat_turn(run_log, "agent" if result is not None else "unknown_agent",
+                                     replies=0 if result is None else 1)
                     if result is None:
                         valid = ", ".join(f"@{n.lower()}" for n in network.all_agent_names)
                         cli.console.print(f"[red]Unknown agent '{target}'. Valid: {valid}[/red]")
@@ -108,6 +134,7 @@ async def run() -> None:
                 # No @-prefix → broadcast to all
                 with cli.thinking_all(network.all_agent_names):
                     responses = await network.broadcast_chat(user_input)
+                record_chat_turn(run_log, "all", replies=len(responses))
                 for name, response in responses:
                     cli.agent_message(name, response)
 

@@ -1,0 +1,175 @@
+{
+  "date": "2026-10-14",
+  "label": "baseline",
+  "parser": "agents/worker_agent.py:_parse_validation",
+  "cases": 34,
+  "correct": 26,
+  "accuracy": 0.765,
+  "false_approvals": 4,
+  "false_approval_ids": [
+    "negated_approve",
+    "do_not_approve",
+    "disapprove",
+    "both_words"
+  ],
+  "false_concerns": 4,
+  "false_concern_ids": [
+    "markdown_bold",
+    "markdown_heading",
+    "markdown_bullet",
+    "status_space_colon"
+  ],
+  "run_log_rejected": 15,
+  "targets": {
+    "accuracy": 0.9,
+    "false_approvals": 0
+  },
+  "targets_met": {
+    "accuracy": false,
+    "false_approvals": false
+  },
+  "by_tag": {
+    "canonical": {
+      "n": 2,
+      "ok": 2
+    },
+    "case": {
+      "n": 2,
+      "ok": 2
+    },
+    "whitespace": {
+      "n": 1,
+      "ok": 1
+    },
+    "preamble": {
+      "n": 2,
+      "ok": 2
+    },
+    "partial": {
+      "n": 2,
+      "ok": 2
+    },
+    "trailing": {
+      "n": 1,
+      "ok": 1
+    },
+    "variant": {
+      "n": 3,
+      "ok": 3
+    },
+    "multi_status": {
+      "n": 1,
+      "ok": 1
+    },
+    "malformed": {
+      "n": 6,
+      "ok": 6
+    },
+    "no_answer": {
+      "n": 2,
+      "ok": 2
+    },
+    "markdown": {
+      "n": 4,
+      "ok": 1
+    },
+    "spacing": {
+      "n": 1,
+      "ok": 0
+    },
+    "negation": {
+      "n": 3,
+      "ok": 0
+    },
+    "ambiguous": {
+      "n": 1,
+      "ok": 0
+    },
+    "order": {
+      "n": 1,
+      "ok": 1
+    },
+    "json": {
+      "n": 1,
+      "ok": 1
+    },
+    "language": {
+      "n": 1,
+      "ok": 1
+    }
+  },
+  "failures": [
+    {
+      "id": "markdown_bold",
+      "tag": "markdown",
+      "ok": false,
+      "got": "concern",
+      "expected": "approve",
+      "intent": "approve",
+      "run_log_label": "rejected"
+    },
+    {
+      "id": "markdown_heading",
+      "tag": "markdown",
+      "ok": false,
+      "got": "concern",
+      "expected": "approve",
+      "intent": "approve",
+      "run_log_label": "rejected"
+    },
+    {
+      "id": "markdown_bullet",
+      "tag": "markdown",
+      "ok": false,
+      "got": "concern",
+      "expected": "approve",
+      "intent": "approve",
+      "run_log_label": "rejected"
+    },
+    {
+      "id": "status_space_colon",
+      "tag": "spacing",
+      "ok": false,
+      "got": "concern",
+      "expected": "approve",
+      "intent": "approve",
+      "run_log_label": "rejected"
+    },
+    {
+      "id": "negated_approve",
+      "tag": "negation",
+      "ok": false,
+      "got": "approve",
+      "expected": "concern",
+      "intent": "concern",
+      "run_log_label": "accepted"
+    },
+    {
+      "id": "do_not_approve",
+      "tag": "negation",
+      "ok": false,
+      "got": "approve",
+      "expected": "concern",
+      "intent": "concern",
+      "run_log_label": "accepted"
+    },
+    {
+      "id": "disapprove",
+      "tag": "negation",
+      "ok": false,
+      "got": "approve",
+      "expected": "concern",
+      "intent": "concern",
+      "run_log_label": "accepted"
+    },
+    {
+      "id": "both_words",
+      "tag": "ambiguous",
+      "ok": false,
+      "got": "approve",
+      "expected": "concern",
+      "intent": "concern",
+      "run_log_label": "accepted"
+    }
+  ]
+}

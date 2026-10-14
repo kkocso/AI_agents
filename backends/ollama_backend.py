@@ -22,6 +22,11 @@ class OllamaBackend(BaseBackend):
             ) from e
         except Exception as e:
             raise RuntimeError(f"Ollama request failed: {e}") from e
+        self.last_usage = {
+            "input": getattr(response, "prompt_eval_count", None),
+            "output": getattr(response, "eval_count", None),
+            "response_model": getattr(response, "model", None),
+        }
         if response is None or not getattr(response, "message", None):
             return "(No response from Ollama.)"
         content = getattr(response.message, "content", None)
