@@ -142,10 +142,21 @@ Project specifics:
   - tokens: Anthropic `usage` incl. `cache_read_input_tokens` and
     `cache_creation_input_tokens`; Ollama `prompt_eval_count` / `eval_count`.
   - outcome: `accepted`; `no_answer` (empty / "(No response …)" placeholder);
-    `unavailable` (model not reachable — exception re-raised unchanged);
-    `rejected` (validation answer without a STATUS verdict, which
-    `_parse_validation` turns into CONCERN — the default itself is unchanged).
-  - **Wording rule:** never "AI error" in anything user-facing.
+    `unavailable` (not reachable — reason `connection` / `timeout` / `server`
+    (5xx, overloaded) / `rate_limited` (429) / `unknown`);
+    `error` (the provider refused and the operator must fix it — reason `auth`
+    (401/403, missing key), `quota` (credit balance / quota), `model_not_found`
+    (404, e.g. Ollama model not pulled), `bad_request` (other 4xx); also an
+    `AI_REFUSED` warning in `run_report.md`); `rejected` (validation answer
+    without a STATUS verdict, which `_parse_validation` turns into CONCERN —
+    the default itself is unchanged). Failed calls re-raise the exception
+    unchanged; only the reason code and exception class name are logged, never
+    the message. Classification: `backends/tracked.py:classify_exception`.
+  - **Wording rule:** never "AI error" in anything user-facing. "Error" is
+    reserved for operator-fixable refusals (`error` outcome above).
+- **Session end:** Ctrl-C / Ctrl-D ends the run with status `interrupted` and a
+  `session_interrupted` event (actor `human`), not `failed`
+  (`observability.session_run`).
 - **LLM touchpoints and evals:**
 
   | Point | prompt_id | Eval | Last result |
@@ -162,7 +173,8 @@ Project specifics:
   | `malformed_validation_share` | ≤ 0.05 | validation answers without a STATUS verdict (counted as CONCERN) — prompt/model format health |
   | `ai_unavailable_share` | ≤ 0.02 | AI requests where the model was not reachable |
   | `ai_no_answer_share` | ≤ 0.05 | AI requests that returned no usable answer |
-  | `cost_usd_estimate` | ≤ 0.50 USD | estimated Claude cost per session (`observability.py:PRICE_TABLE` — verify prices and model ids before quoting) |
+  | `ai_error_share` | = 0 | AI requests refused by the provider (key, quota, model name) — operator must fix |
+  | `cost_usd_estimate` | ≤ 0.50 USD | estimated Claude cost per session (`observability.py:PRICE_TABLE` — prices checked 2026-10-14 incl. cache reads; model ids still to verify) |
 
 - **Prompt caching (proposal, off by default):** `CLAUDE_PROMPT_CACHE=1` sends the
   persona system prompt with `cache_control: ephemeral`. Without it the request is

@@ -17,9 +17,11 @@ this repo is public.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 from vendor.run_logger import RunLogger
 
@@ -40,15 +42,20 @@ TARGETS = {
                              "label": "AI requests where the model was not reachable"},
     "ai_no_answer_share": {"target": 0.05, "direction": "max",
                            "label": "AI requests that returned no usable answer"},
+    "ai_error_share": {"target": 0.0, "direction": "max",
+                       "label": "AI requests refused by the provider (key, quota or model name - operator must fix)"},
     "cost_usd_estimate": {"target": 0.50, "direction": "max", "unit": " USD",
                           "label": "Estimated Claude API cost of the session"},
 }
 
 # --- Claude price table (USD per million tokens) --------------------------
-# TO VERIFY before quoting costs to anyone: copied from
-# https://platform.claude.com/docs/en/about-claude/pricing on 2026-10-14.
-# Keys must equal the model id passed to the API (--model / persona `model:`);
-# the ids below are assumed from the docs' slugs -- check them too.
+# Prices: checked against https://platform.claude.com/docs/en/about-claude/pricing
+# on 2026-10-14 (two separate reads, all values identical), incl. cache reads.
+# Note the page's exceptions to the usual 0.1x cache-read multiplier:
+# Opus 5.5 and Sonnet 5.5 use 0.05x (hence $0.20 / $0.10 below).
+# STILL TO VERIFY: the model ids (keys). The pricing page shows model names,
+# not API ids; the keys below are assumed from the docs' slugs and must equal
+# the id passed to the API (--model / persona `model:`), else cost stays empty.
 # Ollama runs locally and has no price (cost stays empty).
 PRICE_TABLE = {
     "claude-sonnet-4-6": {"input": 3.00, "output": 15.00, "cache_read": 0.30, "cache_write_5m": 3.75},
@@ -60,6 +67,30 @@ PRICE_TABLE = {
     "claude-opus-5":     {"input": 5.00, "output": 25.00, "cache_read": 0.50, "cache_write_5m": 6.25},
     "claude-opus-5-5":   {"input": 4.00, "output": 20.00, "cache_read": 0.20, "cache_write_5m": 5.00},
 }
+
+
+INTERRUPTS = (KeyboardInterrupt, asyncio.CancelledError, EOFError)
+
+
+@contextlib.contextmanager
+def session_run(run: RunLogger) -> Iterator[RunLogger]:
+    """Like ``with run:``, but a user ending the session with Ctrl-C / Ctrl-D
+    is recorded as status ``interrupted`` (not ``failed``) plus a
+    ``session_interrupted`` event (actor human). The exception is re-raised."""
+    try:
+        yield run
+    except INTERRUPTS as e:
+        run._end_marked("interrupted")
+        run.status = "interrupted"
+        run.error = {"type": type(e).__name__}
+        run.event("session_interrupted", actor="human")
+        run.close()
+        raise
+    except BaseException as e:
+        run.__exit__(type(e), e, e.__traceback__)
+        raise
+    else:
+        run.__exit__(None, None, None)
 
 
 def start_run(args, runs_dir: Optional[Path] = None) -> RunLogger:
@@ -127,6 +158,8 @@ def record_metrics(run: RunLogger, network=None) -> None:
                 round(sum(1 for c in calls if c.get("outcome") == "unavailable") / n, 3))
         _metric(run, "ai_no_answer_share",
                 round(sum(1 for c in calls if c.get("outcome") == "no_answer") / n, 3))
+        _metric(run, "ai_error_share",
+                round(sum(1 for c in calls if c.get("outcome") == "error") / n, 3))
         cache_creation = sum(c.get("gen_ai.usage.cache_creation_input_tokens") or 0 for c in calls)
         if cache_creation:
             run.count("cache_creation_input_tokens", cache_creation)

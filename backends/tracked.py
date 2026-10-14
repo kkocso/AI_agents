@@ -16,12 +16,23 @@ latency, estimated cost and the outcome:
                      backend's "(No response ...)" / "(Empty response ...)"
                      placeholder text)
 - ``unavailable`` -- the model could not be reached (connection, timeout,
-                     server/API down); the exception is re-raised unchanged
+                     server overloaded / 5xx, per-minute rate limit); reason
+                     ``connection`` / ``timeout`` / ``server`` /
+                     ``rate_limited`` / ``unknown``
+- ``error``       -- the provider refused the request and the OPERATOR must
+                     fix something (Gabor's rule: "error" is reserved for
+                     this); reason ``auth`` (bad / missing key, 401/403),
+                     ``quota`` (credit balance / quota used up),
+                     ``model_not_found`` (404, e.g. Ollama model not pulled),
+                     ``bad_request`` (other 4xx). A ``AI_REFUSED`` warning
+                     with the reason code lands in run_report.md.
+                     In both cases the exception is re-raised unchanged.
 - ``rejected``    -- a validator threw out the answer; used for plan
                      validations that are not in the ``STATUS:`` format and
                      therefore fall back to CONCERN
 
-None of these is an "AI error" -- see CLAUDE.md wording rule.
+None of these means the AI gave a wrong answer -- see the CLAUDE.md wording
+rule. Only fixed reason codes are logged, never the exception message.
 
 prompt_version = ``<template version>+<persona hash>``: the task template
 is versioned in ``prompts/``, the persona (system prompt) is user-local and
@@ -35,7 +46,7 @@ backend's ``generate`` exactly as before.
 
 from __future__ import annotations
 
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Tuple
 
 from backends.base import BaseBackend
 from network.message import ChatMessage
@@ -52,6 +63,46 @@ NO_ANSWER_TEXTS = frozenset({
 })
 
 _PROVIDERS = {"ClaudeBackend": "anthropic", "OllamaBackend": "ollama"}
+
+
+def _exception_chain(exc: BaseException):
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        yield exc
+        exc = exc.__cause__ or exc.__context__
+
+
+def classify_exception(exc: BaseException) -> Tuple[str, str]:
+    """(outcome, reason) for a failed backend call. Duck-typed (class name +
+    ``status_code``) so it works for anthropic and ollama errors and for the
+    RuntimeError the Ollama backend wraps them in. The message text is only
+    inspected for the Anthropic "credit balance" case, never logged."""
+    for e in _exception_chain(exc):
+        name = type(e).__name__
+        status = getattr(e, "status_code", None)
+        status = status if isinstance(status, int) and status > 0 else None
+        text = str(e).lower()
+        if name in ("AuthenticationError", "PermissionDeniedError", "CredentialsError") \
+                or status in (401, 403):
+            return "error", "auth"
+        if status == 402 or "credit balance" in text or "insufficient_quota" in text:
+            return "error", "quota"
+        if name == "NotFoundError" or status == 404:
+            return "error", "model_not_found"
+        if name in ("APITimeoutError", "TimeoutError", "ReadTimeout", "ConnectTimeout") \
+                or isinstance(e, TimeoutError):
+            return "unavailable", "timeout"
+        if name == "RateLimitError" or status == 429:
+            return "unavailable", "rate_limited"
+        if name in ("OverloadedError", "InternalServerError", "ServiceUnavailableError") \
+                or (status is not None and status >= 500):
+            return "unavailable", "server"
+        if status is not None and 400 <= status < 500:
+            return "error", "bad_request"
+        if name == "APIConnectionError" or isinstance(e, (ConnectionError, OSError)):
+            return "unavailable", "connection"
+    return "unavailable", "unknown"
 
 
 def persona_hash(persona: str) -> str:
@@ -106,8 +157,15 @@ class TrackedBackend(BaseBackend):
             try:
                 answer = await self.inner.generate(system_prompt, messages)
             except Exception as e:
-                call.outcome("unavailable")
+                outcome, reason = classify_exception(e)
+                call.outcome(outcome)
+                call.record["reason"] = reason
                 call.record["error.type"] = type(e).__name__
+                if outcome == "error" and not any(
+                        w.get("code") == "AI_REFUSED" and w.get("where") == reason
+                        for w in self.run.warnings):
+                    self.run.warn("AI request refused by the provider - operator action needed",
+                                  code="AI_REFUSED", where=reason)
                 raise
             usage = getattr(self.inner, "last_usage", None) or {}
             call.tokens(input=usage.get("input"), output=usage.get("output"),

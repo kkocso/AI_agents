@@ -152,6 +152,64 @@ def test_unavailable_backend_logs_failed_session(tmp_path, monkeypatch):
     assert data["status"] == "failed" and data["error"] == {"type": "RuntimeError"}
     assert data["metrics"]["ai_unavailable_share"]["value"] == 1.0
     assert data["metrics"]["ai_unavailable_share"]["met"] is False
+    assert data["metrics"]["ai_error_share"]["value"] == 0.0
+
+
+def test_auth_refusal_counts_as_error_share(tmp_path, monkeypatch):
+    from tests.test_tracked_backend import _anthropic_exc
+    monkeypatch.setattr(agents.parser, "_create_backend",
+                        lambda t, m: FakeBackend(exc=_anthropic_exc("AuthenticationError", 401)))
+    with pytest.raises(Exception):
+        with RunLogger("t", runs_dir=tmp_path / "runs") as run:
+            net = _network(run)
+            try:
+                _drive(net, tmp_path)
+            finally:
+                record_metrics(run, net)
+    data = json.loads((run.dir / "run.json").read_text())
+    assert data["metrics"]["ai_error_share"]["value"] == 1.0
+    assert data["metrics"]["ai_error_share"]["met"] is False
+    assert data["metrics"]["ai_unavailable_share"]["value"] == 0.0
+    assert data["warnings"]["items"][0]["where"] == "auth"
+
+
+@pytest.mark.parametrize("exc", [KeyboardInterrupt, asyncio.CancelledError, EOFError])
+def test_session_run_marks_user_interrupt(tmp_path, exc):
+    from observability import session_run
+    with pytest.raises(exc):
+        with session_run(RunLogger("t", runs_dir=tmp_path / "runs")) as run:
+            run.mark_stage("chat_mode")
+            raise exc()
+    data = json.loads((run.dir / "run.json").read_text())
+    assert data["status"] == "interrupted" and data["error"] == {"type": exc.__name__}
+    assert data["stages"][-1] == {"name": "chat_mode", "ms": data["stages"][-1]["ms"],
+                                  "status": "interrupted"}
+    assert ("session_interrupted", "human") in [(e["kind"], e["actor"]) for e in data["events"]]
+
+
+def test_session_run_other_failures_and_success(tmp_path):
+    from observability import session_run
+    with pytest.raises(ValueError):
+        with session_run(RunLogger("t", runs_dir=tmp_path / "a")) as run:
+            raise ValueError("x")
+    assert json.loads((run.dir / "run.json").read_text())["status"] == "failed"
+    with session_run(RunLogger("t", runs_dir=tmp_path / "b")) as run:
+        pass
+    assert json.loads((run.dir / "run.json").read_text())["status"] == "success"
+
+
+def test_main_ctrl_d_at_prompt_is_interrupted(tmp_path, fakes, monkeypatch):
+    agents_files = _personas(tmp_path)
+    monkeypatch.setenv("RUN_LOGGER_DIR", str(tmp_path / "runs"))
+    monkeypatch.setattr(sys, "argv", ["main.py", "--agents", *agents_files])
+
+    def eof(prompt=""):
+        raise EOFError
+    monkeypatch.setattr(builtins, "input", eof)
+    with pytest.raises(EOFError):
+        cli_main.main()
+    (run_dir,) = list((tmp_path / "runs").iterdir())
+    assert json.loads((run_dir / "run.json").read_text())["status"] == "interrupted"
 
 
 def test_main_session_end_to_end(tmp_path, fakes, monkeypatch, capsys):

@@ -3,7 +3,8 @@ import asyncio
 import sys
 
 from network.network import AgentNetwork
-from observability import record_chat_turn, record_metrics, record_session_start, start_run
+from observability import (record_chat_turn, record_metrics, record_session_start,
+                           session_run, start_run)
 from ui.cli import CLI
 
 
@@ -48,7 +49,7 @@ async def run() -> None:
     args = parse_args()
     cli = CLI()
     # One session = one run log in runs/ (no task/plan/persona/chat text).
-    with start_run(args) as run_log:
+    with session_run(start_run(args)) as run_log:
         network = AgentNetwork(
             default_backend=args.backend,
             default_model=args.model,

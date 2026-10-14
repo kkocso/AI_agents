@@ -49,14 +49,87 @@ def test_placeholder_answer_is_no_answer(tmp_path, text):
     assert _calls(run)[0]["outcome"] == "no_answer"
 
 
-@pytest.mark.parametrize("exc", [RuntimeError("Ollama request failed (is Ollama running?)"),
-                                 ConnectionError(), TimeoutError()])
-def test_unreachable_is_unavailable_and_reraised(tmp_path, exc):
+def _anthropic_exc(cls_name, status, message="boom"):
+    import anthropic
+    import httpx
+    resp = httpx.Response(status, request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"))
+    return getattr(anthropic, cls_name)(message, response=resp, body=None)
+
+
+def _ollama_wrapped(exc):
+    """Exactly how OllamaBackend wraps client errors."""
+    try:
+        try:
+            raise exc
+        except Exception as e:
+            raise RuntimeError(f"Ollama request failed: {e}") from e
+    except RuntimeError as wrapped:
+        return wrapped
+
+
+def _connection_wrapped():
+    try:
+        try:
+            raise ConnectionError("Failed to connect to Ollama")
+        except (ConnectionError, OSError) as e:
+            raise RuntimeError(f"Ollama request failed (is Ollama running?): {e}") from e
+    except RuntimeError as wrapped:
+        return wrapped
+
+
+def _cases():
+    import anthropic
+    import httpx
+    import ollama
+    req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    return [
+        # not reachable -> unavailable
+        (_connection_wrapped(), "unavailable", "connection"),
+        (ConnectionError(), "unavailable", "connection"),
+        (TimeoutError(), "unavailable", "timeout"),
+        (anthropic.APIConnectionError(request=req), "unavailable", "connection"),
+        (anthropic.APITimeoutError(request=req), "unavailable", "timeout"),
+        (_anthropic_exc("InternalServerError", 500), "unavailable", "server"),
+        (_anthropic_exc("APIStatusError", 529), "unavailable", "server"),
+        (_anthropic_exc("RateLimitError", 429), "unavailable", "rate_limited"),
+        (_ollama_wrapped(ollama.ResponseError("server busy", 503)), "unavailable", "server"),
+        (RuntimeError("something odd"), "unavailable", "unknown"),
+        # operator must fix -> error
+        (_anthropic_exc("AuthenticationError", 401), "error", "auth"),
+        (_anthropic_exc("PermissionDeniedError", 403), "error", "auth"),
+        (_anthropic_exc("NotFoundError", 404), "error", "model_not_found"),
+        (_ollama_wrapped(ollama.ResponseError("model 'llama9' not found", 404)), "error", "model_not_found"),
+        (_anthropic_exc("BadRequestError", 400, "Your credit balance is too low"), "error", "quota"),
+        (_anthropic_exc("BadRequestError", 400, "max_tokens too large"), "error", "bad_request"),
+    ]
+
+
+@pytest.mark.parametrize("exc,outcome,reason", _cases(),
+                         ids=lambda v: v if isinstance(v, str) else type(v).__name__)
+def test_failure_kinds_and_reraise(tmp_path, exc, outcome, reason):
+    """Not reachable -> unavailable; operator-fixable refusal -> error with a
+    fixed reason code. The exception itself is re-raised unchanged."""
+    with RunLogger("t", runs_dir=tmp_path) as run:
+        with pytest.raises(type(exc)) as raised:
+            asyncio.run(_worker(run, FakeBackend(exc=exc)).give_feedback("t"))
+        assert raised.value is exc
+    c = _calls(run)[0]
+    assert (c["outcome"], c["reason"]) == (outcome, reason)
+    assert c["error.type"] == type(exc).__name__
+    data = json.loads((run.dir / "run.json").read_text())
+    refused = [w for w in data["warnings"]["items"] if w["code"] == "AI_REFUSED"]
+    assert refused == ([{"code": "AI_REFUSED", "where": reason, "stage": None,
+                         "message": "AI request refused by the provider - operator action needed"}]
+                       if outcome == "error" else [])
+
+
+def test_error_messages_never_logged(tmp_path):
+    exc = _anthropic_exc("BadRequestError", 400, "credit balance SECRET-ACCOUNT-123 too low")
     with RunLogger("t", runs_dir=tmp_path) as run:
         with pytest.raises(type(exc)):
             asyncio.run(_worker(run, FakeBackend(exc=exc)).give_feedback("t"))
-    c = _calls(run)[0]
-    assert c["outcome"] == "unavailable" and c["error.type"] == type(exc).__name__
+    blob = "".join(p.read_text() for p in run.dir.iterdir())
+    assert "SECRET-ACCOUNT-123" not in blob and '"reason": "quota"' in blob
 
 
 @pytest.mark.parametrize("answer,status,outcome", [
