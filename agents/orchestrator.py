@@ -1,10 +1,12 @@
 from typing import List, Tuple
 
 from agents.base_agent import BaseAgent
+from agents.prompts import CHAT_TEMPLATE_VERSION, PROMPT_VERSIONS, render
 from network.message import AgentValidation, ChatMessage
 
 
 class OrchestratorAgent(BaseAgent):
+    role = "orchestrator"
 
     async def synthesize_plan(
         self,
@@ -16,16 +18,11 @@ class OrchestratorAgent(BaseAgent):
         extra = f"\n\nAdditional guidance from the human: {human_note}" if human_note else ""
         messages = [ChatMessage(
             role="user",
-            content=(
-                f"Task to plan: {task}\n\n"
-                f"Feedback from team members:\n\n{feedback_block}{extra}\n\n"
-                "Create a comprehensive plan that addresses all requirements, "
-                "concerns, and must-haves raised by the team. "
-                "Structure it with clear sections: Overview, Requirements, "
-                "Technical Approach, Risks & Mitigations, and Phases."
-            ),
+            content=render("orchestrator.synthesize_plan", task=task,
+                           feedback_block=feedback_block, extra=extra),
         )]
-        return await self._generate(messages)
+        return await self._generate(messages, "synthesize_plan",
+                                    PROMPT_VERSIONS["orchestrator.synthesize_plan"])
 
     async def refine_plan(
         self,
@@ -42,17 +39,12 @@ class OrchestratorAgent(BaseAgent):
         extra = f"\n\nAdditional guidance from the human: {human_note}" if human_note else ""
         messages = [ChatMessage(
             role="user",
-            content=(
-                f"Task: {task}\n\n"
-                f"Original team requirements:\n\n{feedback_block}\n\n"
-                f"Current plan:\n{current_plan}\n\n"
-                f"Unresolved concerns from team:\n\n{concerns_block}{extra}\n\n"
-                "Revise the plan to specifically address these concerns "
-                "without compromising requirements that are already met. "
-                "Keep the same structure as before."
-            ),
+            content=render("orchestrator.refine_plan", task=task, feedback_block=feedback_block,
+                           current_plan=current_plan, concerns_block=concerns_block, extra=extra),
         )]
-        return await self._generate(messages)
+        return await self._generate(messages, "refine_plan",
+                                    PROMPT_VERSIONS["orchestrator.refine_plan"])
 
     async def chat(self, message: str) -> str:
-        return await self._generate([ChatMessage(role="user", content=message)])
+        return await self._generate([ChatMessage(role="user", content=message)],
+                                    "chat", CHAT_TEMPLATE_VERSION)

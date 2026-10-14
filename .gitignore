@@ -28,3 +28,6 @@ walkthrough.md
 
 # Private persona files (copy from personas.example/ and customise locally)
 personas/
+
+# Run logs (observability) -- local only, never commit (see CLAUDE.md)
+runs/
